@@ -1,0 +1,65 @@
+name: Build and Deploy Azure Functions (Python)
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+env:
+  AZURE_FUNCTIONAPP_NAME: com682cw2
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run tests (if you have them)
+        run: |
+          pytest -q
+        # If you don't have tests yet, you can temporarily allow this to pass:
+        continue-on-error: true
+
+      - name: Package
+        run: |
+          zip -r functionapp.zip . -x "*.git*" "*__pycache__*" "*.venv*" "*.pytest_cache*"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: functionapp
+          path: functionapp.zip
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: functionapp
+
+      - name: Deploy to Azure Functions
+        uses: Azure/functions-action@v1
+        with:
+            app-name: ${{ env.AZURE_FUNCTIONAPP_NAME }}
+            publish-profile: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}
+            package: functionapp.zip
+
+        
+
+      - name: Deploy
+        uses: Azure/functions-action@v1
+        with:
+          app-name: ${{ env.AZURE_FUNCTIONAPP_NAME }}
+          package: functionapp.zip
