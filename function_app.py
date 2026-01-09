@@ -48,9 +48,12 @@ def uploadMedia(req: func.HttpRequest) -> func.HttpResponse:
         "contentType": content_type,
         "sizeBytes": len(data),
         "blobName": blob_name,
-        "uploadedAt": datetime.now(timezone.utc).isoformat()
+        "uploadedAt": datetime.now(timezone.utc).isoformat(),
     }
     container.upsert_item(doc)
+
+    # temp line - checking ga deployment
+    doc['deployment'] = 'deployed with github actions'
 
     return func.HttpResponse(
         body=json.dumps(doc),
