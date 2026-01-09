@@ -20,6 +20,8 @@ def get_cosmos_container(container: str):
 
 @app.route(route="uploadMedia", methods=["POST"], auth_level=func.AuthLevel.ANONYMOUS)
 def uploadMedia(req: func.HttpRequest) -> func.HttpResponse:
+    logging.info('uploadMedia called')
+
     user_id = req.form.get("userId")
     file = req.files.get("file")
 
@@ -63,6 +65,8 @@ def uploadMedia(req: func.HttpRequest) -> func.HttpResponse:
 
 @app.route(route="createPost", methods=["POST"], auth_level=func.AuthLevel.ANONYMOUS)
 def createPost(req: func.HttpRequest) -> func.HttpResponse:
+    logging.info('createPost called')
+
     try:
         body = req.get_json()
     except ValueError:
@@ -111,6 +115,8 @@ def createPost(req: func.HttpRequest) -> func.HttpResponse:
 
 @app.route(route="getPosts", methods=["GET"], auth_level=func.AuthLevel.ANONYMOUS)
 def getPosts(req: func.HttpRequest) -> func.HttpResponse:
+    logging.info('getPosts called')
+
     user_id = req.params.get("userId")
 
     if not user_id:
@@ -135,6 +141,8 @@ def getPosts(req: func.HttpRequest) -> func.HttpResponse:
 
 @app.route(route="getAllPosts", methods=["GET"], auth_level=func.AuthLevel.ANONYMOUS)
 def getAllPosts(req: func.HttpRequest) -> func.HttpResponse:
+    logging.info('getAllPosts called')
+
     post_container = get_cosmos_container("COSMOS_POST_CONTAINER")
 
     query = """
@@ -153,6 +161,8 @@ def getAllPosts(req: func.HttpRequest) -> func.HttpResponse:
 
 @app.route(route="getUserMedia", methods=["GET"], auth_level=func.AuthLevel.ANONYMOUS)
 def getUserMedia(req: func.HttpRequest) -> func.HttpResponse:
+    logging.info('getUserMedia called')
+
     user_id = req.params.get("userId")
     if not user_id:
         return func.HttpResponse("Missing userId", status_code=400)
@@ -176,6 +186,8 @@ def getUserMedia(req: func.HttpRequest) -> func.HttpResponse:
 
 @app.route(route="deletePost", methods=["DELETE"], auth_level=func.AuthLevel.ANONYMOUS)
 def deletePost(req: func.HttpRequest) -> func.HttpResponse:
+    logging.info('deletePost called')
+
     user_id = req.params.get("userId")
     post_id = req.params.get("postId")
 
@@ -195,6 +207,8 @@ def deletePost(req: func.HttpRequest) -> func.HttpResponse:
 
 @app.route(route="deleteMedia", methods=["DELETE"], auth_level=func.AuthLevel.ANONYMOUS)
 def deleteMedia(req: func.HttpRequest) -> func.HttpResponse:
+    logging.info('deleteMedia called')
+
     user_id = req.params.get("userId")
     media_id = req.params.get("mediaId")
 
