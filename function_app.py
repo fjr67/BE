@@ -55,7 +55,7 @@ def uploadMedia(req: func.HttpRequest) -> func.HttpResponse:
     container.upsert_item(doc)
 
     # temp line - checking ga deployment
-    doc['deployment'] = 'deployed with github actions'
+    doc['deployment'] = 'deployed using github actions'
 
     return func.HttpResponse(
         body=json.dumps(doc),
