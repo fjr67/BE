@@ -23,13 +23,7 @@ jobs:
       - name: Install deps
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Run tests (if you have them)
-        run: |
-          pytest -q
-        # If you don't have tests yet, you can temporarily allow this to pass:
-        continue-on-error: true
+          pip install -r requirements.txt --target=".python_packages/lib/site-packages"
 
       - name: Package
         run: |
@@ -52,14 +46,7 @@ jobs:
       - name: Deploy to Azure Functions
         uses: Azure/functions-action@v1
         with:
-            app-name: ${{ env.AZURE_FUNCTIONAPP_NAME }}
-            publish-profile: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}
-            package: functionapp.zip
-
-        
-
-      - name: Deploy
-        uses: Azure/functions-action@v1
-        with:
           app-name: ${{ env.AZURE_FUNCTIONAPP_NAME }}
+          publish-profile: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}
           package: functionapp.zip
+          scm-do-build-during-deployment: false
