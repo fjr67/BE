@@ -7,6 +7,7 @@ from azure.storage.blob import BlobServiceClient, ContentSettings
 from azure.cosmos import CosmosClient
 from azure.core.exceptions import ResourceExistsError
 import json
+import requests
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 
@@ -17,6 +18,35 @@ def get_cosmos_container(container: str):
     )
     db = client.get_database_client(os.environ["COSMOS_DATABASE"])
     return db.get_container_client(os.environ[container])
+
+def analyseImage(image_bytes: bytes, content_type: str):
+    foundry_endpoint = os.environ["VISION_ENDPOINT"].rstrip("/")
+    vision_key = os.environ["VISION_KEY"]
+
+    url = f"{foundry_endpoint}/vision/v3.2/analyze"
+    logging.info(f"Vision url = {url}")
+
+    params = {
+        "visualFeatures": "Description,Tags",
+        "language": "en"
+    }
+
+    headers = {
+        "Ocp-Apim-Subscription-Key": vision_key,
+        "Content-Type": content_type or "application/octet-stream"
+    }
+
+    response = requests.post(url, params=params, headers=headers, data=image_bytes, timeout=20)
+    response.raise_for_status()
+    return response.json()
+
+
+def limitTags(tags, max_tags=5):
+    if not tags:
+        return []
+    
+    sorted_tags = sorted(tags, key=lambda t: t.get("confidence", 0), reverse=True)
+    return sorted_tags[:max_tags]
 
 @app.route(route="uploadMedia", methods=["POST"], auth_level=func.AuthLevel.ANONYMOUS)
 def uploadMedia(req: func.HttpRequest) -> func.HttpResponse:
@@ -51,6 +81,9 @@ def uploadMedia(req: func.HttpRequest) -> func.HttpResponse:
         "sizeBytes": len(data),
         "blobName": blob_name,
         "uploadedAt": datetime.now(timezone.utc).isoformat(),
+        "imageAnalysis": { 
+            "status": "pending"
+        }
     }
     container.upsert_item(doc)
 
@@ -243,3 +276,115 @@ def deleteMedia(req: func.HttpRequest) -> func.HttpResponse:
         return func.HttpResponse('failed to delete cosmos document', status_code=500)
     
     return func.HttpResponse(status_code=204)
+
+
+@app.route(route="analyseMedia", methods=["POST"], auth_level=func.AuthLevel.ANONYMOUS)
+def analyseMedia(req: func.HttpRequest) -> func.HttpResponse:
+    logging.info("analyseMedia called")
+
+    supported_image_types = {
+        "image/jpeg",
+        "image/png",
+        "image/gif",
+        "image/webp",
+        "image/bmp"
+    }
+
+    user_id = req.params.get("userId")
+    media_id = req.params.get("mediaId")
+
+    if not user_id or not media_id:
+        return func.HttpResponse("Missing userId or mediaId", status_code=400)
+    
+    media_container = get_cosmos_container("COSMOS_MEDIA_CONTAINER")
+
+    try:
+        media_doc = media_container.read_item(item=media_id, partition_key=user_id)
+    except Exception:
+        return func.HttpResponse("Media not found", status_code=404)
+    
+    blob_name = media_doc.get("blobName")
+    content_type = media_doc.get("contentType", "application/octet-stream")
+
+    if content_type not in supported_image_types:
+        media_doc["imageAnalysis"] = {
+            "status": "skipped",
+            "reason": "unsupported media type",
+            "contentType": content_type
+        }
+        media_container.upsert_item(media_doc)
+
+        return func.HttpResponse(
+            body=json.dumps(media_doc),
+            status_code=200,
+            mimetype="application/json"
+        )
+
+    if not blob_name:
+        return func.HttpResponse("media record missing blobName", status_code=500)
+    
+    try:
+        blob_service = BlobServiceClient.from_connection_string(os.environ["MEDIA_STORAGE_CONNECTION_STRING"])
+        container_client = blob_service.get_container_client(os.environ["BLOB_CONTAINER"])
+        blob_client = container_client.get_blob_client(blob_name)
+
+        image_bytes = blob_client.download_blob().readall()
+    except Exception:
+        logging.exception("failed to download blob for analysis")
+        return func.HttpResponse("failed to download blob", status_code=500)
+    
+    try:
+        result = analyseImage(image_bytes, content_type)
+
+        captions = (result.get("description") or {}).get("captions") or []
+        best_caption = captions[0] if captions else None
+
+        raw_tags = result.get("tags", [])
+        limited_tags = limitTags(raw_tags, max_tags=5)
+
+        analysis_doc = {
+            "status": "complete",
+            "analysedAt": datetime.now(timezone.utc).isoformat(),
+            "caption": best_caption,
+            "tags": limited_tags,
+            "metadata": result.get("metadata"),
+            "modelVersion": result.get("modelVersion")
+        }
+
+        media_doc["imageAnalysis"] = analysis_doc
+        media_container.upsert_item(media_doc)
+
+        return func.HttpResponse(
+            body=json.dumps(analysis_doc),
+            status_code=200,
+            mimetype="application/json"
+        )
+    
+    except requests.HTTPError as e:
+        logging.exception("vision http error")
+        
+        vision_status = getattr(e.response, "status_code", None)
+        vision_body = getattr(e.response, "text", None)
+
+        media_doc["imageAnalysis"] = {
+            "status": "failed",
+            "analysedAt": datetime.now(timezone.utc).isoformat(),
+            "visionStatus": vision_status,
+            "visionError": vision_body or str(e)
+        }
+        media_container.upsert_item(media_doc)
+        return func.HttpResponse(
+            body=json.dumps(media_doc["imageAnalysis"]),
+            status_code=502,
+            mimetype="application/json"
+        )
+    
+    except Exception as e:
+        logging.exception("vision analysis failed")
+        media_doc["imageAnalysis"] = {
+            "status": "failed",
+            "analysedAt": datetime.now(timezone.utc).isoformat(),
+            "error": str(e)
+        }
+        media_container.upsert_item(media_doc)
+        return func.HttpResponse("vision analysis failed", status_code=500)

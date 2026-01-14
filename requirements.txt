@@ -6,3 +6,4 @@ azure-functions
 azure-storage-blob
 azure-cosmos
 python-multipart
+requests
