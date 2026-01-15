@@ -11,6 +11,14 @@ import requests
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 
+supported_image_types = {
+    "image/jpeg",
+    "image/png",
+    "image/gif",
+    "image/webp",
+    "image/bmp"
+}
+
 def get_cosmos_container(container: str):
     client = CosmosClient(
         os.environ["COSMOS_ENDPOINT"],
@@ -48,6 +56,9 @@ def limitTags(tags, max_tags=5):
     sorted_tags = sorted(tags, key=lambda t: t.get("confidence", 0), reverse=True)
     return sorted_tags[:max_tags]
 
+def normaliseContentType(conType: str | None) -> str:
+    return (conType or "").split(";")[0].strip().lower()
+
 @app.route(route="uploadMedia", methods=["POST"], auth_level=func.AuthLevel.ANONYMOUS)
 def uploadMedia(req: func.HttpRequest) -> func.HttpResponse:
     logging.info('uploadMedia called')
@@ -60,7 +71,7 @@ def uploadMedia(req: func.HttpRequest) -> func.HttpResponse:
     
     media_id = str(uuid.uuid4())
     file_name = file.filename
-    content_type = file.content_type
+    content_type = normaliseContentType(file.content_type)
 
     blob_name = f"{user_id}/{media_id}-{file_name}"
 
@@ -73,6 +84,17 @@ def uploadMedia(req: func.HttpRequest) -> func.HttpResponse:
     blob_client.upload_blob(data, overwrite=True, content_settings=ContentSettings(content_type=content_type))
 
     container = get_cosmos_container("COSMOS_MEDIA_CONTAINER")
+
+    analysis_status = (
+        {"status": "pending"}
+        if content_type in supported_image_types
+        else {
+            "status": "skipped",
+            "reason": "unsupported media type for image analysis",
+            "contentType": content_type
+        }
+    )
+
     doc = {
         "id": media_id,
         "userId": user_id,
@@ -81,9 +103,7 @@ def uploadMedia(req: func.HttpRequest) -> func.HttpResponse:
         "sizeBytes": len(data),
         "blobName": blob_name,
         "uploadedAt": datetime.now(timezone.utc).isoformat(),
-        "imageAnalysis": { 
-            "status": "pending"
-        }
+        "imageAnalysis": analysis_status
     }
     container.upsert_item(doc)
 
@@ -119,6 +139,13 @@ def createPost(req: func.HttpRequest) -> func.HttpResponse:
                 media_doc = media_container.read_item(item=m, partition_key=user_id)
             except Exception:
                 return func.HttpResponse(f"media not found or not owned by user: {m}", status_code=404)
+            
+            content_type = normaliseContentType(media_doc.get("contentType"))
+
+            if content_type in supported_image_types:
+                analysis = (media_doc.get('imageAnalysis') or {})
+                if analysis.get('status') != 'complete':
+                    return func.HttpResponse(f"media must be analysed before posting: {m}", status_code=400)
             
             media_refs.append({
                 "mediaId": media_doc["id"],
@@ -282,14 +309,6 @@ def deleteMedia(req: func.HttpRequest) -> func.HttpResponse:
 def analyseMedia(req: func.HttpRequest) -> func.HttpResponse:
     logging.info("analyseMedia called")
 
-    supported_image_types = {
-        "image/jpeg",
-        "image/png",
-        "image/gif",
-        "image/webp",
-        "image/bmp"
-    }
-
     user_id = req.params.get("userId")
     media_id = req.params.get("mediaId")
 
@@ -304,7 +323,7 @@ def analyseMedia(req: func.HttpRequest) -> func.HttpResponse:
         return func.HttpResponse("Media not found", status_code=404)
     
     blob_name = media_doc.get("blobName")
-    content_type = media_doc.get("contentType", "application/octet-stream")
+    content_type = normaliseContentType(media_doc.get("contentType", "application/octet-stream"))
 
     if content_type not in supported_image_types:
         media_doc["imageAnalysis"] = {
