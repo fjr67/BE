@@ -105,10 +105,10 @@ def uploadMedia(req: func.HttpRequest) -> func.HttpResponse:
         "uploadedAt": datetime.now(timezone.utc).isoformat(),
         "imageAnalysis": analysis_status
     }
+
     container.upsert_item(doc)
 
-    # temp line - checking ga deployment
-    doc['deployment'] = 'deployed using github actions'
+    logging.info("media uploaded", doc)
 
     return func.HttpResponse(
         body=json.dumps(doc),
