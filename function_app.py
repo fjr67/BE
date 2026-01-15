@@ -48,9 +48,7 @@ def analyseImage(image_bytes: bytes, content_type: str):
     response.raise_for_status()
     return response.json()
 
-
 def limitTags(tags, max_tags=5):
-    ### temp comment for Github actions
     if not tags:
         return []
     
