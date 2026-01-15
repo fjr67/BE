@@ -50,6 +50,7 @@ def analyseImage(image_bytes: bytes, content_type: str):
 
 
 def limitTags(tags, max_tags=5):
+    ### temp comment for Github actions
     if not tags:
         return []
     
