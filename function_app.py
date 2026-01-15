@@ -108,7 +108,7 @@ def uploadMedia(req: func.HttpRequest) -> func.HttpResponse:
 
     container.upsert_item(doc)
 
-    logging.info("media uploaded", doc)
+    logging.info("media uploaded: %s", json.dumps(doc, default=str))
 
     return func.HttpResponse(
         body=json.dumps(doc),
