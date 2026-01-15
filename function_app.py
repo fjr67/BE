@@ -407,3 +407,53 @@ def analyseMedia(req: func.HttpRequest) -> func.HttpResponse:
         }
         media_container.upsert_item(media_doc)
         return func.HttpResponse("vision analysis failed", status_code=500)
+    
+
+@app.route(route="editPost", methods=["PUT"], auth_level=func.AuthLevel.ANONYMOUS)
+def editPost(req: func.HttpRequest) -> func.HttpResponse:
+    logging.info("editPost called")
+
+    try:
+        body = req.get_json()
+    except ValueError:
+        return func.HttpResponse("Invalid JSON body", status_code=400)
+    
+    user_id = body.get("userId")
+    post_id = body.get("postId")
+    new_title = body.get("title")
+    new_caption = body.get("caption")
+
+    if not user_id or not post_id:
+        return func.HttpResponse("Missing userId or postId", status_code=400)
+    
+    if new_title is None and new_caption is None:
+        return func.HttpResponse("Provide title or caption to edit", status_code=400)
+    
+    post_container = get_cosmos_container("COSMOS_POST_CONTAINER")
+
+    try:
+        post_doc = post_container.read_item(item=post_id, partition_key=user_id)
+    except Exception:
+        return func.HttpResponse("Post not found", status_code=400)
+    
+    if new_title is not None:
+        if not str(new_title).strip():
+            return func.HttpResponse("Title cannot be empty", status_code=400)
+        post_doc["title"] = str(new_title).strip()
+
+    if new_caption is not None:
+        post_doc["caption"] = str(new_caption)
+
+    post_doc["updatedAt"] = datetime.now(timezone.utc).isoformat()
+
+    try:
+        post_container.replace_item(item=post_id, body=post_doc)
+    except Exception:
+        logging.exception("Failed to edit post")
+        return func.HttpResponse("Failed to edit post", status_code=500)
+    
+    return func.HttpResponse(
+        body=json.dumps(post_doc),
+        status_code=200,
+        mimetype="application/json"
+    )
