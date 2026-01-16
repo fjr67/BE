@@ -27,7 +27,7 @@ def get_cosmos_container(container: str):
     db = client.get_database_client(os.environ["COSMOS_DATABASE"])
     return db.get_container_client(os.environ[container])
 
-def analyseImage(image_bytes: bytes, content_type: str):
+def analyseImage(image_bytes: bytes, content_type: str):  #########
     foundry_endpoint = os.environ["VISION_ENDPOINT"].rstrip("/")
     vision_key = os.environ["VISION_KEY"]
 
@@ -58,7 +58,7 @@ def limitTags(tags, max_tags=5):
 def normaliseContentType(conType: str | None) -> str:
     return (conType or "").split(";")[0].strip().lower()
 
-@app.route(route="uploadMedia", methods=["POST"], auth_level=func.AuthLevel.ANONYMOUS)
+@app.route(route="uploadMedia", methods=["POST"], auth_level=func.AuthLevel.ANONYMOUS) #############
 def uploadMedia(req: func.HttpRequest) -> func.HttpResponse:
     logging.info('uploadMedia endpoint called')
 
@@ -264,7 +264,7 @@ def deletePost(req: func.HttpRequest) -> func.HttpResponse:
     return func.HttpResponse(status_code=204)
 
 
-@app.route(route="deleteMedia", methods=["DELETE"], auth_level=func.AuthLevel.ANONYMOUS)
+@app.route(route="deleteMedia", methods=["DELETE"], auth_level=func.AuthLevel.ANONYMOUS) ##########
 def deleteMedia(req: func.HttpRequest) -> func.HttpResponse:
     logging.info('deleteMedia endpoint called')
 
@@ -304,7 +304,7 @@ def deleteMedia(req: func.HttpRequest) -> func.HttpResponse:
     return func.HttpResponse(status_code=204)
 
 
-@app.route(route="analyseMedia", methods=["POST"], auth_level=func.AuthLevel.ANONYMOUS)
+@app.route(route="analyseMedia", methods=["POST"], auth_level=func.AuthLevel.ANONYMOUS) ###########
 def analyseMedia(req: func.HttpRequest) -> func.HttpResponse:
     logging.info("analyseMedia endpoint called")
 
@@ -408,7 +408,7 @@ def analyseMedia(req: func.HttpRequest) -> func.HttpResponse:
         return func.HttpResponse("vision analysis failed", status_code=500)
     
 
-@app.route(route="editPost", methods=["PUT"], auth_level=func.AuthLevel.ANONYMOUS)
+@app.route(route="editPost", methods=["PUT"], auth_level=func.AuthLevel.ANONYMOUS) #################
 def editPost(req: func.HttpRequest) -> func.HttpResponse:
     logging.info("editPost endpoint called")
 
